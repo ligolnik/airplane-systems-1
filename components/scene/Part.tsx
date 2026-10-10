@@ -5,8 +5,9 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { animatePart } from "@/lib/anims";
 import type { Catalogue, PartSpec, ShellSpec } from "@/lib/catalogue";
-import { finishMat, ghostMat, mats, plateMat, shellMat, skinMat, solidMat } from "@/lib/materials";
+import { finishMat, ghostMat, mats, plateMat, seeMat, shellMat, skinMat, solidMat } from "@/lib/materials";
 import { registerPart } from "@/lib/registry";
+import { geoCentreZ, SPOT_COLOR, spotsAt, spotsPart } from "@/lib/spot";
 import { palette, sysColor, type SysId } from "@/lib/systems";
 import { useNarrowLayout, useView } from "@/lib/view";
 
@@ -65,29 +66,34 @@ export function Part({ spec, cat }: { spec: PartSpec; cat: Catalogue }) {
   const labels = useView((x) => x.labels);
   const theme = useView((x) => x.theme);
   const cf = useView((x) => x.ctrlFocus);
+  const spot = useView((x) => x.spot);
   const narrow = useNarrowLayout();
 
   const color = (!xray && spec.solidColor) || spec.color || sysColor(spec.sys[0], theme);
-  const all = sys === "overview";
+  // a walk-around spot highlights its parts and dims every other part, the shown system's included (X-ray still shows it)
+  const spotted = spotsPart(spot, spec, geo, cat);
+  const all = sys === "overview" && !spot;
   // Flight-controls channel focus: parts outside the chosen channel fade out
   const chanDim = sys === "controls" && cf !== "all" && !spec.chan?.includes(cf);
-  const act = (all || spec.sys.includes(sys)) && !chanDim;
-  const focused = !!focus && focus === spec.name;
+  const act = spotted || (!spot && (all || spec.sys.includes(sys)) && !chanDim);
+  const focused = (!!focus && focus === spec.name) || spotted;
   // fairings (wheel pants) ghost in X-ray like the skin, so what they cover stays visible
   const ghost = !!spec.fairing && xray && !focused && act;
-  const material = focused
-    ? mats(color).hi
-    : spec.plate
-      ? act
-        ? plateMat.on
-        : plateMat.dim
-      : ghost
-        ? all
-          ? shellMat
-          : ghostMat(sysColor(spec.sys[0], theme))
-        : act || !xray
-          ? mats(color).on
-          : mats(color).dim;
+  const material = spotted
+    ? mats(SPOT_COLOR).hi
+    : focused
+      ? mats(color).hi
+      : spec.plate
+        ? act
+          ? plateMat.on
+          : plateMat.dim
+        : ghost
+          ? all
+            ? shellMat
+            : ghostMat(sysColor(spec.sys[0], theme))
+          : act || !xray
+            ? mats(color).on
+            : mats(color).dim;
   // a ghosted fairing picks like the skin, so the wheel or brake seen through it gets the tooltip
   const pick: PickInfo | undefined = spec.name
     ? { name: spec.name, note: spec.note ?? "", color, sys: spec.sys, shell: ghost || undefined }
@@ -139,7 +145,17 @@ export function Shell({ spec }: { spec: ShellSpec }) {
   const geo = specGeo(spec);
   const xray = useView((x) => x.xray);
   const theme = useView((x) => x.theme);
-  const material = xray ? shellMat : spec.skin ? skinMat(spec.skin) : spec.finish ? finishMat[spec.finish] : solidMat;
+  const spotted = useView((x) => spotsAt(x.spot, spec.name, geoCentreZ(geo)));
+  const material =
+    xray && spotted
+      ? seeMat(SPOT_COLOR)
+      : xray
+        ? shellMat
+        : spec.skin
+          ? skinMat(spec.skin)
+          : spec.finish
+            ? finishMat[spec.finish]
+            : solidMat;
   const pick: PickInfo | undefined = spec.name
     ? { name: spec.name, note: spec.note, color: palette(theme).frame, sys: ["airframe"], shell: true }
     : undefined;

@@ -17,9 +17,13 @@ export type FuelPump = "OFF" | "BOOST" | "HIGH";
 export type FuelSel = "L" | "R" | "OFF";
 export type Vent = "P" | "PF" | "PFW" | "W";
 export type CabinSwitch = "OFF" | "ON" | "AUTO";
-/** Optional equipment fitted. `fiki`: TKS ice protection approved for flight into known icing (POH 7-13, 8-21). */
+/**
+ * Optional equipment fitted. `fiki`: TKS ice protection approved for flight into known icing (POH 7-13, 8-21). `oxygen`: the
+ * built-in oxygen system (POH 4-5 items 1i, 1q "if available"); left out, it is fitted, as on the modelled airplane.
+ */
 export interface Equip {
   fiki: boolean;
+  oxygen?: boolean;
 }
 
 export interface Sim {

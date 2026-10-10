@@ -5,6 +5,7 @@ import * as THREE from "three";
 import type { Catalogue, SurfaceSpec } from "@/lib/catalogue";
 import { seeMat, shellMat, skinMat, solidMat } from "@/lib/materials";
 import { V } from "@/lib/math";
+import { geoCentreZ, SPOT_COLOR, spotsAt } from "@/lib/spot";
 import { sysColor } from "@/lib/systems";
 import { useView } from "@/lib/view";
 import { Parts, specGeo, type PickInfo } from "./Part";
@@ -44,11 +45,22 @@ export function ControlSurface({
   const xray = useView((x) => x.xray);
   const theme = useView((x) => x.theme);
   const cf = useView((x) => x.ctrlFocus);
+  const spotted = useView((x) => spotsAt(x.spot, spec.name, geoCentreZ(geo) + spec.pivot[2]));
+  const spotOn = useView((x) => !!x.spot);
   const chanDim = sys === "controls" && cf !== "all" && !spec.chan?.includes(cf);
-  const active = sys !== "overview" && spec.sys.includes(sys) && !chanDim;
+  // a walk-around spot dims every surface it doesn't name, the shown system's included
+  const active = spotted || (!spotOn && sys !== "overview" && spec.sys.includes(sys) && !chanDim);
   const color = sysColor(spec.sys[0], theme);
   // highlighted in its own view; in X-ray the highlight is translucent so the balance weights inside show
-  const material = xray ? (active ? seeMat(color) : shellMat) : spec.skin ? skinMat(spec.skin) : solidMat;
+  const material = xray
+    ? spotted
+      ? seeMat(SPOT_COLOR)
+      : active
+        ? seeMat(color)
+        : shellMat
+    : spec.skin
+      ? skinMat(spec.skin)
+      : solidMat;
   useFrame(() => {
     ref.current.quaternion.setFromAxisAngle(axis, angle(spec.key));
   });

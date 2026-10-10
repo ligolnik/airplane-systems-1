@@ -102,11 +102,21 @@ function Rail() {
 function Panel() {
   const def = useAircraft();
   const sys = useView((x) => x.sys),
-    theme = useView((x) => x.theme);
+    theme = useView((x) => x.theme),
+    walking = useView((x) => x.walking);
   const s = sysOf(def, sys),
     Body = def.panels[s.id];
   // phones: after picking a system from far down the panel, bring the 3D view back up
   useEffect(revealStage, [sys, def]);
+  const Walk = walking ? def.walk?.Panel : undefined;
+  if (Walk)
+    return (
+      <aside className="panel">
+        <div className="panel-inner">
+          <Walk />
+        </div>
+      </aside>
+    );
   return (
     <aside className="panel">
       <div className="panel-inner" style={{ "--c": sysColor(s.id, theme) } as React.CSSProperties}>
@@ -130,14 +140,27 @@ const SUN = (
 const MOON = <path d="M13.5 10.2A5.8 5.8 0 0 1 5.8 2.5a5.8 5.8 0 1 0 7.7 7.7z" />;
 
 function Toolbar() {
+  const def = useAircraft();
   const xray = useView((x) => x.xray),
     labels = useView((x) => x.labels),
     spin = useView((x) => x.spin),
-    theme = useView((x) => x.theme);
+    theme = useView((x) => x.theme),
+    walking = useView((x) => x.walking);
   const { set, setTheme, flyTo } = useView.getState();
   const dark = theme === "dark";
+  const walk = def.walk;
   return (
     <div className="toolbar">
+      {walk && (
+        <button
+          className="tb"
+          aria-pressed={walking}
+          title={walking ? "Leave the preflight walk-around" : "Guided preflight walk-around"}
+          onClick={() => (walking ? walk.close() : walk.open())}
+        >
+          Preflight
+        </button>
+      )}
       <button className="tb" aria-pressed={xray} onClick={() => set({ xray: !xray })}>
         X-ray
       </button>
@@ -297,6 +320,8 @@ function useBoot() {
       saved = read("fleetAc");
     if (u) show(...u);
     else show(isAircraftId(saved) ? saved : "sr20");
+    // the airplane's walk-around: a ?walk= deep link, or saved progress to resume
+    aircraft(useView.getState().ac).walk?.boot(location.search);
     return () => os.removeEventListener("change", onOs);
   }, []);
 }
@@ -308,8 +333,9 @@ export default function App() {
   // (next.config.ts rewrites), which gets a neutral title. (React hoists <title> into <head>; app/layout.tsx sets none.)
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  const walking = useView((x) => x.walking);
   return (
-    <div className="app">
+    <div className={walking ? "app walking" : "app"}>
       <title>{mounted ? `${def.name} Systems` : "Airplane Systems"}</title>
       <Rail />
       <main className="stage">

@@ -111,8 +111,8 @@ describe("SR22T engine study groups (POH 7-31–39)", () => {
       ),
     });
     expect(counts(parts)).toEqual({
-      total: 409,
-      core: 137,
+      total: 421,
+      core: 149,
       multi: 6,
       member: [81, 92, 46, 12, 24, 23],
       single: [81, 86, 41, 11, 24, 23],

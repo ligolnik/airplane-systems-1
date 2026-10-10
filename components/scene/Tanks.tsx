@@ -23,6 +23,7 @@ export function Tanks({ tanks }: { tanks: TankSpec[] }) {
   const sys = useView((x) => x.sys);
   const labels = useView((x) => x.labels);
   const theme = useView((x) => x.theme);
+  const spot = useView((x) => !!x.spot);
   const items = useMemo(
     () =>
       tanks.map((t) => {
@@ -74,7 +75,8 @@ export function Tanks({ tanks }: { tanks: TankSpec[] }) {
       if (it.fuelMesh) it.fuelMesh.visible = q > 0;
     }
   });
-  const act = sys === "overview" || sys === "fuel";
+  // a walk-around spot dims the tanks with everything else it doesn't name
+  const act = !spot && (sys === "overview" || sys === "fuel");
   return (
     <>
       {items.map((it) => {

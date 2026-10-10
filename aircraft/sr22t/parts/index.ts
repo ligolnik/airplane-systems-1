@@ -6,7 +6,7 @@
  *   helpers the sections share (no parts)
  * - airframe.ts — fuselage, spinner, wing, trailing-edge, stabilizer and fin shells
  * - surfaces.ts — flaps, ailerons, elevator and rudder, and the details on them (wicks, horn balances, hinges, trim tabs)
- * - cowl.ts — cowl openings: cooling inlets, NACA induction ducts, exit louvers, oil filler door
+ * - cowl.ts — cowl openings: cooling inlets, NACA induction ducts, exit louvers, oil filler door; front cowl fasteners
  * - gear.ts — main and nose gear, wheels, brakes, parking brake, rudder pedals / toe brakes
  * - engine.ts — propeller and engine: ignition, governor, oil, induction, exhaust, alternators, starter; the turbo, intercooler
  *   and heat-exchanger anchors

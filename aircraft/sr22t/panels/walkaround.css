@@ -1,0 +1,344 @@
+/* SR22T preflight walk-around panel (panels/walkaround.tsx). */
+.walk {
+  --c: var(--accent);
+  display: grid;
+  gap: 12px;
+}
+.walk-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.walk-title {
+  font-family: var(--f-disp);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+.walk-x {
+  background: var(--panel2);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.walk p {
+  margin: 0;
+}
+.walk-notice {
+  border-left: 3px solid var(--accent);
+  background: var(--panel2);
+  padding: 8px 10px;
+  border-radius: 0 5px 5px 0;
+  font-size: 14px;
+}
+.walk-warn,
+.walk-alert.warning {
+  border: 1px solid var(--warn);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  display: grid;
+  gap: 6px;
+}
+.walk-warn b,
+.walk-alert.warning b {
+  color: var(--warn);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.walk-alert.caution {
+  border: 1px solid var(--caut);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.walk-alert.caution b {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.walk-warn ul,
+.walk-through ul,
+.walk-steps {
+  margin: 0;
+  padding-left: 20px;
+}
+.walk-ref {
+  font-size: 12px;
+  color: var(--muted);
+}
+.walk-prog {
+  font-size: 13px;
+  color: var(--muted);
+}
+.walk-bar {
+  height: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.walk-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.walk-map {
+  width: 100%;
+  max-height: 170px;
+}
+.walk-map .fus,
+.walk-map .wing {
+  fill: var(--panel2);
+  stroke: var(--muted);
+  stroke-width: 0.8;
+}
+/* line of sight for an item checked from somewhere else, in the spot colour (lib/spot.ts SPOT_COLOR) */
+.walk-map .sight {
+  pointer-events: none;
+}
+.walk-map .sight line {
+  stroke: #ff7a1a;
+  stroke-width: 1.4;
+  stroke-dasharray: 3 2;
+}
+.walk-map .sight circle {
+  fill: #ff7a1a;
+}
+.walk-map .stn {
+  cursor: pointer;
+}
+.walk-map .stn circle {
+  fill: var(--panel);
+  stroke: var(--accent);
+  stroke-width: 1.2;
+}
+.walk-map .stn text {
+  font-size: 9px;
+  text-anchor: middle;
+  fill: var(--ink);
+  font-weight: 600;
+}
+.walk-map .stn.done circle {
+  fill: var(--panel2);
+  stroke: var(--pitot);
+}
+.walk-map .stn.done text {
+  fill: var(--pitot);
+}
+.walk-map .stn.cur circle {
+  fill: var(--accent);
+}
+.walk-map .stn.cur text {
+  fill: var(--on-accent);
+}
+.walk-map .stn:focus {
+  outline: none;
+}
+.walk-map .stn:focus-visible circle {
+  stroke-width: 2.4;
+}
+.walk-stn {
+  font-family: var(--f-disp);
+  font-size: 18px;
+  margin: 0;
+}
+.walk-card {
+  border: 1px solid var(--rule);
+  background: var(--panel2);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+.walk-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 16px;
+}
+.walk-id {
+  font-family: var(--f-mono);
+  color: var(--muted);
+}
+.walk-text {
+  font-weight: 600;
+}
+.walk-mark {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.walk-mark.ok {
+  color: var(--pitot);
+}
+.walk-std {
+  font-family: var(--f-disp);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+}
+.walk-why {
+  color: var(--muted);
+}
+.walk-tech {
+  justify-self: start;
+  padding: 1px 8px;
+  border: 1px solid var(--caut);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.walk-look {
+  font-weight: 600;
+}
+.walk-see {
+  font-size: 13px;
+  color: var(--muted);
+}
+.walk-nm,
+.walk-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+.walk-actions {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.walk-go {
+  flex: 1;
+  min-height: 52px;
+  font-size: 18px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+}
+.walk-skip {
+  min-width: 72px;
+  font-size: 15px;
+}
+.walk-nav {
+  min-width: 48px;
+  font-size: 20px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--panel2);
+  cursor: pointer;
+}
+.walk-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.walk-through summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+.walk-q {
+  font-family: var(--f-disp);
+  font-size: 22px;
+  margin: 0;
+}
+.walk-sum {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 16px;
+}
+.walk-sum dt {
+  color: var(--muted);
+}
+.walk-sum dd {
+  margin: 0;
+  font-weight: 600;
+}
+.walk-done {
+  display: grid;
+  gap: 12px;
+}
+.walk-ft {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.walk-opt {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink);
+}
+/* larger text, for reading at the airplane */
+.walk-big {
+  font-size: 18px;
+}
+.walk-big .walk-line {
+  font-size: 20px;
+}
+.walk-big .walk-std {
+  font-size: 28px;
+}
+.walk-big .walk-notice,
+.walk-big .walk-nm,
+.walk-big .walk-note,
+.walk-big .walk-prog,
+.walk-big .walk-warn,
+.walk-big .walk-alert {
+  font-size: 16px;
+}
+.walk-big .walk-go {
+  min-height: 60px;
+  font-size: 21px;
+}
+/* phones: the 3D view takes the top of the screen and the card follows it (globals.css stacks the page) */
+@media (max-width: 860px) {
+  .app.walking .rail {
+    display: none;
+  }
+  .app.walking .stage {
+    height: 55vh;
+    min-height: 300px;
+  }
+  .app.walking .panel-inner {
+    padding: 12px 14px 28px;
+  }
+  .walk-map {
+    max-height: 132px;
+  }
+}
+/* the Overview panel's link (panels/general.tsx) */
+.walk-link {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--panel2);
+  cursor: pointer;
+}
+.walk-link b {
+  color: var(--accent);
+  font-size: 15px;
+}
+.walk-link span {
+  font-size: 13px;
+  color: var(--muted);
+}

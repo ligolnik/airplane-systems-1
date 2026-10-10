@@ -64,7 +64,7 @@ function CameraRig() {
     const tt = V(...cam.t),
       tp = V(...cam.p)
         .sub(tt)
-        .multiplyScalar(fitDist(size.width / size.height))
+        .multiplyScalar(cam.exact ? 1 : fitDist(size.width / size.height))
         .add(tt);
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
       flight.current = null;

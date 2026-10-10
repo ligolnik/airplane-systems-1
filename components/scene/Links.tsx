@@ -32,6 +32,7 @@ export function Links({
   const xray = useView((x) => x.xray);
   const cf = useView((x) => x.ctrlFocus);
   const theme = useView((x) => x.theme);
+  const spot = useView((x) => !!x.spot);
   const meshes = useRef<Record<string, THREE.Mesh | null>>({});
   const geo = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 8), []);
   useEffect(() => () => geo.dispose(), [geo]);
@@ -55,7 +56,8 @@ export function Links({
     <>
       {Object.entries(links).map(([k, l]) => {
         const dim = sys === "controls" && cf !== "all" && l.chan && cf !== l.chan;
-        const act = (sys === "overview" || l.sys.includes(sys)) && !dim;
+        // a walk-around spot dims every linkage, with everything else it doesn't name
+        const act = !spot && (sys === "overview" || l.sys.includes(sys)) && !dim;
         const c = l.color ?? "#8C959C";
         const pick: PickInfo = { name: l.name, note: l.note, color: sysColor(l.sys[0], theme), sys: l.sys };
         return (

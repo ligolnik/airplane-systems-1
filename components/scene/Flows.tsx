@@ -31,6 +31,7 @@ export function Flows({
   const xray = useView((x) => x.xray);
   const theme = useView((x) => x.theme);
   const cf = useView((x) => x.ctrlFocus);
+  const spot = useView((x) => !!x.spot);
 
   const items = useMemo(
     () =>
@@ -80,7 +81,10 @@ export function Flows({
     for (const it of items) {
       const rate = R[it.f.key] ?? 0;
       const vis =
-        rate !== 0 && (v.sys === "overview" || it.f.sys.includes(v.sys)) && !chanDim(it.f, v.sys, v.ctrlFocus);
+        rate !== 0 &&
+        !v.spot &&
+        (v.sys === "overview" || it.f.sys.includes(v.sys)) &&
+        !chanDim(it.f, v.sys, v.ctrlFocus);
       it.pts.visible = vis;
       if (!vis) continue;
       const mat = it.pts.material as THREE.PointsMaterial;
@@ -102,7 +106,8 @@ export function Flows({
     <>
       {items.map((it) => {
         const c = it.f.color ?? sysColor(it.f.sys[0], theme);
-        const act = (sys === "overview" || it.f.sys.includes(sys)) && !chanDim(it.f, sys, cf);
+        // a walk-around spot dims every flow, with everything else it doesn't name
+        const act = !spot && (sys === "overview" || it.f.sys.includes(sys)) && !chanDim(it.f, sys, cf);
         const pick: PickInfo | undefined = it.f.name
           ? { name: it.f.name, note: it.f.note ?? "", color: c, sys: it.f.sys }
           : undefined;

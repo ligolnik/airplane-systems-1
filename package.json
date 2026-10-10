@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui:m20c": "node scripts/test-m20c-ui.mjs",
+    "test:ui:walkaround": "node scripts/test-walkaround-ui.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run typecheck && npm test",

@@ -6,6 +6,7 @@
  */
 import { create } from "zustand";
 import { useSyncExternalStore } from "react";
+import type { Spot } from "./spot";
 import type { Vec3 } from "./math";
 import type { AircraftId, Chan, SysId, Theme } from "./systems";
 
@@ -20,6 +21,8 @@ export interface CamRequest {
   p: Vec3;
   t: Vec3;
   id: number;
+  /** A pose already fitted to the viewport (e.g. a framing put back as the user left it): used as is. */
+  exact?: boolean;
 }
 
 export interface View {
@@ -35,6 +38,10 @@ export interface View {
   theme: Theme;
   cam: CamRequest | null;
   hover: HoverInfo | null;
+  /** Guided walk-around: parts highlighted while everything else is dimmed. */
+  spot: Spot | null;
+  /** The airplane's guided walk-around is open (it replaces the system panel). */
+  walking: boolean;
 }
 
 interface ViewStore extends View {
@@ -91,6 +98,8 @@ export const useView = create<ViewStore>((set) => ({
   theme: "light",
   cam: null,
   hover: null,
+  spot: null,
+  walking: false,
   set: (p) => set(p),
   flyTo: (p, t) => set({ cam: { p, t, id: ++camId } }),
   setTheme: (theme, save = true) => {

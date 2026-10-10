@@ -53,4 +53,9 @@ export interface AircraftDef {
   labels?: { cat: Catalogue; inside?: (p: THREE.Vector3) => boolean };
   /** Camera for "Reset view" when something special is going on (e.g. CAPS deployed); null = the system's camera. */
   resetCam?: () => [Vec3, Vec3] | null;
+  /**
+   * Optional guided preflight walk-around (SR22T): the toolbar's Preflight button opens and closes it, `Panel` replaces
+   * the system panel while the view's `walking` is set, and `boot` handles the page's query string (`?walk=7`) on load.
+   */
+  walk?: { Panel: ComponentType; open: () => void; close: () => void; boot: (search: string) => void };
 }
