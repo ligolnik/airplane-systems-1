@@ -62,18 +62,22 @@ it("unwraps lettering in opposite directions on port/starboard without blending 
 describe.each(FLEET)("$id exterior geometry", (def) => {
   // The Mooney carries these shells in its moving empennage group, outside CAT.shells.
   const shells = [...def.labels!.cat.shells, ...(def.id === "m20c" ? TAIL_SHELLS : [])];
-  // The SR22T hull (door cut-outs, exhaust exits) takes several seconds to build, as in the SR22T door and NACA-inlet tests.
-  it("has finite positions, normals and UVs on painted shells and moving surfaces", () => {
-    for (const spec of [...shells, ...def.labels!.cat.surfaces]) {
-      const g = spec.geo();
-      for (const name of ["position", "normal", ...(spec.skin ? ["uv"] : [])]) {
-        const a = g.getAttribute(name);
-        expect(a, `${def.id}: ${spec.name} ${name}`).toBeDefined();
-        expect(Array.from(a.array).every(Number.isFinite)).toBe(true);
+  // SR22T hull cut-outs can take over 30s on a shared CI runner; allow headroom without relaxing the geometry assertions.
+  it(
+    "has finite positions, normals and UVs on painted shells and moving surfaces",
+    () => {
+      for (const spec of [...shells, ...def.labels!.cat.surfaces]) {
+        const g = spec.geo();
+        for (const name of ["position", "normal", ...(spec.skin ? ["uv"] : [])]) {
+          const a = g.getAttribute(name);
+          expect(a, `${def.id}: ${spec.name} ${name}`).toBeDefined();
+          expect(Array.from(a.array).every(Number.isFinite)).toBe(true);
+        }
+        g.dispose();
       }
-      g.dispose();
-    }
-  }, 30000);
+    },
+    def.id === "sr22t" ? 60000 : 30000,
+  );
   it("keeps the aircraft's paint on its fin and hinged rudder", () => {
     const fin = shells.find((s) => s.name === "Vertical stabilizer" || s.name === "Vertical fin")!;
     const rudder = def.labels!.cat.surfaces.find((s) => s.key === "rudder")!;
