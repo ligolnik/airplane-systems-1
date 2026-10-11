@@ -273,13 +273,24 @@ export function solve(s: Sim, prev?: Elec): Elec {
     run = s.eng.running,
     t = e.tBat;
   const cb = (name: string) => !s.cb[name];
-  const alt1 = run && e.alt1 && !e.fail.alt1 && e.bat1 && cb("ALT 1"); // ALT 1 field needs BAT 1 on
-  const alt2 = run && e.alt2 && !e.fail.alt2 && (e.bat1 || e.bat2) && cb("ALT 2"); // ALT 2 field from ESS BUS 2
   const bat1Dead = e.fail.bat1;
-  // The timeline represents time with BAT 2 as the sole source (POH 3-17).
-  const bat2Dead = !alt1 && !alt2 && (!e.bat1 || bat1Dead) && t >= 30;
   const bat1ok = e.bat1 && !bat1Dead;
+  const enabled1 = run && e.alt1 && !e.fail.alt1 && cb("ALT 1"),
+    enabled2 = run && e.alt2 && !e.fail.alt2 && cb("ALT 2");
+  // Self-exciting, not self-starting (POH 7-47). An online alternator feeds its own regulator; stopping the engine,
+  // opening its field breaker or switching it off clears that state (7-53). Without a previous solution, require a
+  // live startup source. ALT 2 cannot back-feed ALT 1's A/C BUS 1 supply (7-49).
+  const held1 = enabled1 && prev?.alt1 === true,
+    held2 = enabled2 && prev?.alt2 === true;
+  // Establish BAT 2 availability BEFORE new excitation: otherwise assuming ALT 2 output first conceals depletion.
+  // The timeline represents time with BAT 2 as the sole source (POH 3-17); existing generation or BAT 1 backs it up.
+  const bat2Dead = !held1 && !held2 && !bat1ok && t >= 30;
   const bat2ok = e.bat2 && !bat2Dead && cb("BAT 2");
+  const essPwr = cb("ESSENTIAL POWER");
+  const alt1 = enabled1 && (held1 || bat1ok); // field supply: A/C BUS 1, fed by MDB 1 (POH 7-49, 7-53)
+  // ALT 2's field supply is ESS BUS 2. BAT 2 reaches it through BAT 2 and ESSENTIAL POWER; BAT 1 / ALT 1 reach the
+  // Essential Distribution Bus directly, without ESSENTIAL POWER (POH Fig 7-10, 7-50, 7-53).
+  const alt2 = enabled2 && (held2 || bat1ok || alt1 || (bat2ok && essPwr));
   const D = 0.7; // diode drop
   const mdb1 = Math.max(alt1 ? 28 : 0, bat1ok ? 24.3 : 0);
   const mdb2 = Math.max(alt2 ? 28.75 : 0, mdb1 ? mdb1 - D : 0); // MDB1 → MDB2 only
@@ -287,8 +298,7 @@ export function solve(s: Sim, prev?: Elec): Elec {
   // ESS BUS 2 hangs straight off it; ESS BUS 1 through the ESSENTIAL POWER breaker, and BAT 2 joins ESS BUS 1 through the
   // BAT 2 breaker, so with the alternators and BAT 1 gone BAT 2 feeds the Ess Dist Bus and ESS BUS 2 back through
   // ESSENTIAL POWER (POH 7-50, Fig 7-10 on 7-48)
-  const bat2v = bat2ok ? 24.2 : 0,
-    essPwr = cb("ESSENTIAL POWER");
+  const bat2v = bat2ok ? 24.2 : 0;
   const edbIn = Math.max(mdb1, mdb2) ? Math.max(mdb1, mdb2) - D : 0;
   const edb = Math.max(edbIn, essPwr ? bat2v : 0);
   const ess1 = Math.max(essPwr ? edb : 0, bat2v),
