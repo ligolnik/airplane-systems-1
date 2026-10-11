@@ -139,8 +139,23 @@ export interface PfdData {
   afcs?: AfcsAnnunc | null;
   /** Red "PITCH TRIM" annunciation (KAP 140 installations: `kap140Pfd()`), shown at the top of the annunciation window. */
   pitchTrim?: string | null;
+  /** Sensor comparator annunciations, dual-sensor installations only; omit (or empty) for none. */
+  comparators?: Comparator[];
+  /** Reversionary sensor window text above the roll scale, e.g. "USING AHRS2" (PG 190-02183-01 Fig 2-48, Table 2-5). */
+  reversionary?: string[];
   /** Clock (s) for flashing; defaults to the wall clock. */
   t?: number;
+}
+
+/**
+ * A sensor comparator annunciation (Perspective+ PG 190-02183-01 Rev. A Fig 2-47, Table 2-4, p. 105–106): black text on a
+ * white background when one or both sensed values are unavailable (no compare), on amber for a miscompare. `at` is the
+ * compared value, which sets its place on the PFD as Fig 2-47 shows; `text` is what the box reads (e.g. "VDI NO COMP").
+ */
+export interface Comparator {
+  at: "IAS" | "ALT" | "PIT" | "ROL" | "HDG" | "VDI";
+  text: string;
+  miscompare?: boolean;
 }
 
 /** One engine-indication item for the EIS strip. */
@@ -387,6 +402,7 @@ function pfdBody(ctx: Ctx, d: PfdData, L: Lay) {
   vsi(ctx, d, L);
   hsi(ctx, d.f, L, pp);
   if (d.afcs) afcsBar(ctx, d.afcs, L, t);
+  sensorAnn(ctx, d, L);
   annWindow(ctx, d, L);
   // OAT, transponder, time
   if (pp) {
@@ -866,6 +882,38 @@ function hsi(ctx: Ctx, f: FlightData, L: Lay, pp: boolean) {
   function headingBox(s: string) {
     rect(ctx, cx - 26, cy - r - 24, 52, 20, "#000", WHITE, 1.5);
     txt(ctx, s, cx, cy - r - 13, WHITE, 16, "center");
+  }
+}
+
+/* sensor comparator (PG Fig 2-47) and reversionary sensor (PG Fig 2-48) annunciations; places approximate */
+function sensorAnn(ctx: Ctx, d: PfdData, L: Lay) {
+  /** A box of `s` with its left (or, `right`, its right) edge at `x`; returns its left edge. */
+  const box = (s: string, x: number, y: number, bg: string, right = false) => {
+    ctx.font = `700 11px ${FONT}`;
+    const w = ctx.measureText(s).width + 8,
+      left = right ? x - w : x;
+    rect(ctx, left, y, w, 14, bg);
+    txt(ctx, s, left + 4, y + 7.5, "#000", 11);
+    return left;
+  };
+  // right column: left of the altimeter's vertical deviation scale
+  const xr = L.altX - 18;
+  let rolX = xr;
+  for (const c of d.comparators ?? []) {
+    const bg = c.miscompare ? YEL : WHITE;
+    if (c.at === "IAS") box(c.text, L.asX + 66, YC + 16, bg);
+    else if (c.at === "ALT") box(c.text, xr, YC + 16, bg, true);
+    else if (c.at === "VDI") box(c.text, xr, TB - 20, bg, true);
+    else if (c.at === "HDG") box(c.text, L.cx + 30, L.hy - L.hr - 21, bg);
+    // PIT at the top right, ROL to its left
+    else if (c.at === "PIT") rolX = box(c.text, xr, TT + 4, bg, true) - 3;
+  }
+  for (const c of d.comparators ?? []) if (c.at === "ROL") box(c.text, rolX, TT + 4, c.miscompare ? YEL : WHITE, true);
+  const rev = d.reversionary ?? [];
+  if (rev.length) {
+    // white on blue, top left of the attitude display above the roll scale
+    rect(ctx, L.asX + 70, TOP + 25, 86, rev.length * 13 + 4, "#1B2C78");
+    rev.forEach((s, i) => txt(ctx, s, L.asX + 74, TOP + 32 + i * 13, WHITE, 11));
   }
 }
 

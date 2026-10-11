@@ -10,6 +10,7 @@ export const isAircraftId = (v: unknown): v is AircraftId =>
 export type SysId =
   | "overview"
   | "airframe"
+  | "doors"
   | "controls"
   | "flaps"
   | "gear"
@@ -20,10 +21,12 @@ export type SysId =
   | "lighting"
   | "environment"
   | "pitot"
+  | "ice"
   | "vacuum"
   | "avionics"
   | "autopilot"
   | "cabin"
+  | "oxygen"
   | "caps";
 
 /** Flight-control channels (for the channel-focus view in Flight controls). */
@@ -50,6 +53,7 @@ export interface SysDef {
 const SYS_COLOR: Record<SysId, ColorKey> = {
   overview: "accent",
   airframe: "frame",
+  doors: "frame",
   controls: "ctrl",
   flaps: "ctrl",
   gear: "gear",
@@ -60,10 +64,12 @@ const SYS_COLOR: Record<SysId, ColorKey> = {
   lighting: "elec",
   environment: "air",
   pitot: "pitot",
+  ice: "pitot",
   vacuum: "pitot",
   avionics: "avx",
   autopilot: "avx",
   cabin: "cabin",
+  oxygen: "cabin",
   caps: "caps",
 };
 

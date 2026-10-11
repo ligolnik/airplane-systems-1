@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { animatePart } from "@/lib/anims";
 import type { Catalogue, PartSpec, ShellSpec } from "@/lib/catalogue";
 import { finishMat, ghostMat, mats, plateMat, shellMat, skinMat, solidMat } from "@/lib/materials";
-import { partObjects } from "@/lib/registry";
+import { registerPart } from "@/lib/registry";
 import { palette, sysColor, type SysId } from "@/lib/systems";
 import { useNarrowLayout, useView } from "@/lib/view";
 
@@ -28,6 +28,13 @@ export function specGeo(spec: { geo: () => THREE.BufferGeometry }) {
     geoCache.set(spec, g);
   }
   return g;
+}
+
+/** Release animation-owned geometry while retaining the reusable catalogue geometry. */
+export function releasePartGeometry(mesh: THREE.Mesh, cached: THREE.BufferGeometry) {
+  if (mesh.geometry === cached) return;
+  mesh.geometry.dispose();
+  mesh.geometry = cached;
 }
 
 export function Pin({ at, label, color }: { at: THREE.Vector3; label: string; color: string }) {
@@ -88,16 +95,16 @@ export function Part({ spec, cat }: { spec: PartSpec; cat: Catalogue }) {
   const showPin = labels && !all && !chanDim && cat.isPinned(spec, sys, narrow);
   const appearance = { material, active: act, focused, ghost };
 
-  useEffect(() => {
-    const name = spec.name,
-      m = ref.current;
-    if (!name || partObjects.has(name)) return;
-    partObjects.set(name, m);
-    return () => {
-      if (partObjects.get(name) === m) partObjects.delete(name);
-    };
-  }, [spec.name]);
+  // "tap to locate" flies to the instance carrying the label
+  useEffect(() => (spec.name ? registerPart(spec.name, ref.current, !!spec.pin) : undefined), [spec.name, spec.pin]);
 
+  useEffect(() => {
+    if (!spec.dynamicGeo) return;
+    const mesh = ref.current;
+    return () => releasePartGeometry(mesh, geo);
+  }, [geo, spec.dynamicGeo]);
+
+  // animatePart applies the scene material policy and shows a part flashed by "tap to locate" even if its animation hides it
   useFrame(({ clock }) => {
     animatePart(ref.current, clock.elapsedTime, spec, appearance);
   });

@@ -28,6 +28,7 @@ export function animatePart(
 
 /** Views where engine parts are shown live (spark plugs flashing, magnetos lit): the same in every airplane. */
 const ENGINE_VIEWS: readonly SysId[] = ["overview", "engine", "propeller"];
+const GEAR_VIEWS: readonly SysId[] = ["overview", "gear"];
 
 /** Lit (`hot`) when `on()` in the given systems' views (and the Overview); Part owns dimming and focus. */
 export const glowAnim =
@@ -59,13 +60,38 @@ export const sparkPhase = (id: string) => {
   return (h % 100) / 10;
 };
 
-/** Spark plug: flashes while `firing()` in the engine views; Part owns dimming and focus. */
+/** Spark flash rate, rad/s: one flash per plug every 2π / SPARK_RATE seconds (illustrative, not engine speed). */
+export const SPARK_RATE = 18;
+
+/**
+ * Spark phase for cylinder `n` so the cylinders flash one after another in `order` (the engine firing order), evenly
+ * spaced over one flash cycle, the first cylinder in the order at t = 0.
+ */
+export const firingPhase = (order: readonly number[], n: number) => {
+  const i = order.indexOf(n);
+  if (i < 0) throw new Error(`Cylinder ${n} is not in the firing order ${order.join("-")}; add it to the order.`);
+  return Math.PI / 2 - (2 * Math.PI * i) / order.length;
+};
+
+/**
+ * Spark plug: flashes while `firing()` in the engine views; Part owns dimming and focus.
+ * It flashes while sin(t · SPARK_RATE + phase) is above `on`; cos(π / cylinders) gives each cylinder its own slot.
+ */
 export const plugAnim =
-  (firing: () => boolean, phase: number): PartAnim =>
+  (firing: () => boolean, phase: number, on = 0.3): PartAnim =>
   (m, t) => {
     const live = inView(ENGINE_VIEWS),
-      flash = live && firing() && Math.sin(t * 18 + phase) > 0.3;
+      flash = live && firing() && Math.sin(t * SPARK_RATE + phase) > on;
     m.material = flash ? mats("#6FD8FF").hi : mats("#DADFE2").on;
+  };
+
+/** Shielded ignition lead: same flash window as its plug; dark while its magneto cannot fire. */
+export const leadAnim =
+  (firing: () => boolean, phase: number, on = 0.3): PartAnim =>
+  (m, t) => {
+    const show = inView(ENGINE_VIEWS),
+      flash = show && firing() && Math.sin(t * SPARK_RATE + phase) > on;
+    m.material = flash ? mats("#6FD8FF").hi : show ? mats("#26333D").on : mats("#26333D").dim;
   };
 
 /** Magneto: lit while `firing()` in the engine views; Part owns dimming and focus. */
@@ -75,13 +101,30 @@ export const magAnim =
     m.material = inView(ENGINE_VIEWS) && firing() ? mats("#6FD8FF").on : mats("#3E4A52").on;
   };
 
-/** Brake disc: glows while `amount()` (0..1, toe brake or parking brake) is applied. */
+/** Brake cue: glows while `amount()` (0..1, toe brake or parking brake) is applied in Gear/Overview; dimmed elsewhere. */
 export const brakeAnim =
   (amount: () => number): PartAnim =>
   (m) => {
-    m.material = amount() > 0.05 ? mats("#FF6A2A").hi : mats("#9AA3AA").on;
+    m.material =
+      !inView(GEAR_VIEWS) && useView.getState().xray
+        ? mats("#9AA3AA").dim
+        : amount() > 0.05
+          ? mats("#FF6A2A").hi
+          : mats("#9AA3AA").on;
   };
 
 /** Toe-brake amount for one side from differential braking (`diff` −1 left … +1 right) and the parking brake. */
-export const brakeAmount = (gear: { park: boolean; diff: number }, side: "R" | "L") =>
-  gear.park ? 0.6 : side === "R" ? Math.max(0, gear.diff) : Math.max(0, -gear.diff);
+export const brakeAmount = (gear: { park: boolean; diff: number; held?: { L: number; R: number } }, side: "R" | "L") =>
+  gear.park ? (gear.held?.[side] ?? 0.6) : side === "R" ? Math.max(0, gear.diff) : Math.max(0, -gear.diff);
+
+/** Hydraulic pressure cue in Gear/Overview (normalized 0–1, not a temperature or psi measurement); dimmed elsewhere. */
+export const pressureAnim =
+  (amount: () => number): PartAnim =>
+  (m) => {
+    m.material =
+      !inView(GEAR_VIEWS) && useView.getState().xray
+        ? mats("#67727D").dim
+        : amount() > 0.05
+          ? mats("#FF6A2A").hi
+          : mats("#67727D").on;
+  };

@@ -141,6 +141,95 @@ export function tubeGeo(points: (Vec3 | THREE.Vector3)[], r: number, tension = 0
   return new THREE.TubeGeometry(curve, Math.max(24, Math.round(curve.getLength() * 24)), r, 8, false);
 }
 
+/** Circular arc of radius `r` leaving `start` along unit `d0` and turning in their plane until it runs along unit `d1`. */
+class BendArc extends THREE.Curve<THREE.Vector3> {
+  private readonly centre: THREE.Vector3;
+  private readonly toStart: THREE.Vector3;
+  private readonly ahead: THREE.Vector3;
+  private readonly turn: number;
+  constructor(start: THREE.Vector3, d0: THREE.Vector3, d1: THREE.Vector3, r: number) {
+    super();
+    const inward = d1.clone().addScaledVector(d0, -d0.dot(d1)).normalize();
+    this.centre = start.clone().addScaledVector(inward, r);
+    this.toStart = inward.multiplyScalar(-r);
+    this.ahead = d0.clone().multiplyScalar(r);
+    this.turn = d0.angleTo(d1);
+  }
+  override getPoint(t: number, target = new THREE.Vector3()) {
+    const a = t * this.turn;
+    return target.copy(this.centre).addScaledVector(this.toStart, Math.cos(a)).addScaledVector(this.ahead, Math.sin(a));
+  }
+}
+
+/**
+ * A bent tube's centreline: straight legs through `points`, each inner corner rounded by a circular arc of radius `bend`
+ * (a pipe bender's centreline radius). A corner whose legs are too short for that radius gets the largest arc that uses
+ * at most half of each neighbouring leg, so arcs never overlap and the ends stay on the first and last points. With
+ * `wholeEnds`, a corner may use all of a first or last leg (no other arc shares it), e.g. a short straight drop onto a
+ * port. Corners listed in `sharp` (indices into `points`) stay unrounded: a tee or a flange the centreline must pass
+ * through exactly.
+ */
+export function bentCurve(points: (Vec3 | THREE.Vector3)[], bend: number, wholeEnds = false, sharp: number[] = []) {
+  const p = points.map((q) => toV(q).clone());
+  const path = new THREE.CurvePath<THREE.Vector3>();
+  let from = p[0];
+  for (let i = 1; i < p.length - 1; i++) {
+    if (sharp.includes(i)) {
+      if (p[i].distanceTo(from) > 1e-9) path.add(new THREE.LineCurve3(from, p[i]));
+      from = p[i];
+      continue;
+    }
+    const d0 = p[i].clone().sub(p[i - 1]),
+      d1 = p[i + 1].clone().sub(p[i]);
+    const share = (leg: THREE.Vector3, end: boolean) => leg.length() * (wholeEnds && end ? 1 : 0.5);
+    const half = Math.min(share(d0, i === 1), share(d1, i === p.length - 2));
+    d0.normalize();
+    d1.normalize();
+    const turn = d0.angleTo(d1);
+    if (turn < 1e-6) continue;
+    const r = Math.min(bend, half / Math.tan(turn / 2));
+    const start = p[i].clone().addScaledVector(d0, -r * Math.tan(turn / 2));
+    if (start.distanceTo(from) > 1e-9) path.add(new THREE.LineCurve3(from, start));
+    const arc = new BendArc(start, d0, d1, r);
+    path.add(arc);
+    from = arc.getPoint(1);
+  }
+  path.add(new THREE.LineCurve3(from, p[p.length - 1]));
+  return path;
+}
+
+/** `bentCurve` sampled every `step` metres (and at both ends): flow points that follow the drawn tube. */
+export function bentPoints(points: (Vec3 | THREE.Vector3)[], bend: number, step = 0.01, wholeEnds = false): Vec3[] {
+  const curve = bentCurve(points, bend, wholeEnds);
+  const n = Math.max(2, Math.ceil(curve.getLength() / step));
+  return Array.from({ length: n + 1 }, (_, i) => curve.getPointAt(i / n).toArray() as Vec3);
+}
+
+/** A tube of radius `r` along `bentCurve(points, bend)`, tessellated about every 5 mm of its length. */
+export function bentTubeGeo(
+  points: (Vec3 | THREE.Vector3)[],
+  r: number,
+  bend: number,
+  radial = 12,
+  wholeEnds = false,
+  sharp: number[] = [],
+) {
+  const curve = bentCurve(points, bend, wholeEnds, sharp);
+  return new THREE.TubeGeometry(curve, Math.max(16, Math.ceil(curve.getLength() / 0.005)), r, radial, false);
+}
+
+/** A band clamp hugging a tube of radius `r`: a torus of section radius `band` around `curve`, square to it, `inset`
+ * metres along it from its start, or from its end when `inset` is negative. */
+export function bandGeo(curve: THREE.Curve<THREE.Vector3>, r: number, inset: number, band = 0.0025) {
+  const length = curve.getLength();
+  const u = (inset >= 0 ? inset : length + inset) / length;
+  const at = curve.getPointAt(u),
+    axis = curve.getTangentAt(u);
+  return new THREE.TorusGeometry(r + band, band, 8, 24)
+    .applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis))
+    .translate(at.x, at.y, at.z);
+}
+
 /**
  * Solid swept along a smooth path with an elliptical section that may change along it (grips, horns). `r(t)` gives the
  * section's half sizes at t = 0…1 of the path's length: [toward `ref`, across]. `ref` is a direction the first half size is
@@ -379,6 +468,15 @@ export const densify = (pts: number[][], step = 0.03, close = true) => {
 
 /* ---------- fuselage factory ---------- */
 
+export interface FuselageSection {
+  hw: number;
+  hh: number;
+  cy: number;
+  nTop: number;
+  nBot: number;
+  tumble: number;
+}
+
 export interface FuselageOpts {
   /** Rows [x, halfWidth, halfHeight, centerY] sorted by DESCENDING x (nose first). */
   table: number[][];
@@ -389,21 +487,33 @@ export interface FuselageOpts {
   tumble: number;
   /** Optional local cross-section, e.g. a rounded cowl transitioning to a slab-sided cabin. */
   section?: (x: number) => { nTop: number; nBot: number; tumble: number };
+  /** Optional station-local profile adjustment, shared by skin geometry and containment. Applied after `section`. */
+  profile?: (x: number, section: FuselageSection) => FuselageSection;
 }
 
 /** Superellipse-section fuselage driven by a station table. */
-export function fuselage({ table, nTop, nBot, tumble, section }: FuselageOpts) {
-  const shapeAt = section ?? (() => ({ nTop, nBot, tumble }));
+export function fuselage({ table, nTop, nBot, tumble, section: sectionOf, profile }: FuselageOpts) {
   const xNose = table[0][0],
     xTail = table[table.length - 1][0];
-  const fus = (x: number) => ({ hw: interp(table, 1, x), hh: interp(table, 2, x), cy: interp(table, 3, x) });
+  const section = (x: number): FuselageSection => {
+    const base = {
+      hw: interp(table, 1, x),
+      hh: interp(table, 2, x),
+      cy: interp(table, 3, x),
+      ...(sectionOf ? sectionOf(x) : { nTop, nBot, tumble }),
+    };
+    return profile ? profile(x, base) : base;
+  };
+  const fus = (x: number) => {
+    const { hw, hh, cy } = section(x);
+    return { hw, hh, cy };
+  };
   const topY = (x: number) => fus(x).cy + fus(x).hh;
   const botY = (x: number) => fus(x).cy - fus(x).hh;
 
   /** Ring of N points around the section at x, scaled by s; optionally an open arc th0..th1 (0 = right side, π/2 = top). */
   function ring(x: number, s = 1, N = 40, th0 = 0, th1 = Math.PI * 2, closed = true): Ring {
-    const { nTop, nBot, tumble } = shapeAt(x);
-    const { hw, hh, cy } = fus(x),
+    const { hw, hh, cy, nTop, nBot, tumble } = section(x),
       pts: Ring = [],
       cnt = closed ? N : N + 1;
     for (let j = 0; j < cnt; j++) {
@@ -420,9 +530,8 @@ export function fuselage({ table, nTop, nBot, tumble, section }: FuselageOpts) {
 
   /** Is a point inside the skin (with margin m, metres)? */
   function inside(p: THREE.Vector3, m = 0) {
-    const { nTop, nBot, tumble } = shapeAt(p.x);
     if (p.x > xNose || p.x < xTail) return false;
-    const { hw, hh, cy } = fus(p.x);
+    const { hw, hh, cy, nTop, nBot, tumble } = section(p.x);
     const py = (p.y - cy) / (hh - m);
     if (Math.abs(py) > 1) return false;
     const n = py >= 0 ? nTop : nBot,
@@ -432,18 +541,24 @@ export function fuselage({ table, nTop, nBot, tumble, section }: FuselageOpts) {
 
   /** Point on the outer skin at (x, y) on the given side (+1 right, -1 left). */
   function onSkin(x: number, y: number, side: number, push = 1.006) {
-    const { nTop, nBot, tumble } = shapeAt(x);
-    const { hw, hh, cy } = fus(x);
+    const { hw, hh, cy, nTop, nBot, tumble } = section(x);
     const py = clamp((y - cy) / hh, -1, 1),
       n = py >= 0 ? nTop : nBot;
     const w = hw * (1 - tumble * Math.max(0, py));
     return V(x, y, side * w * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(py), n)), 1 / n) * push);
   }
 
+  /** Height of the outer lower skin at (x, z), from the section's own nBot (the exponent the loft uses). */
+  function lowerSkinY(x: number, z: number) {
+    const { hw, hh, cy, nBot } = section(x);
+    const r = 1 - Math.pow(Math.abs(z / hw), nBot);
+    // Math.cbrt is exact where Math.pow(r, 1/3) can differ in the last bit: nBot = 3 keeps its prior geometry.
+    return cy - hh * (nBot === 3 ? Math.cbrt(r) : Math.pow(r, 1 / nBot));
+  }
+
   /** Ring angle (0 = side, π/2 = top) where the upper skin passes height y at station x. */
   const thetaAt = (x: number, y: number) => {
-    const { nTop } = shapeAt(x);
-    const { hh, cy } = fus(x);
+    const { hh, cy, nTop } = section(x);
     return Math.asin(Math.pow(clamp((y - cy) / hh, 0, 1), nTop / 2));
   };
 
@@ -528,7 +643,26 @@ export function fuselage({ table, nTop, nBot, tumble, section }: FuselageOpts) {
     return g;
   }
 
-  return { xNose, xTail, nTop, nBot, tumble, fus, topY, botY, ring, inside, onSkin, thetaAt, frontX, geo, plate, slab };
+  return {
+    xNose,
+    xTail,
+    nTop,
+    nBot,
+    tumble,
+    section,
+    fus,
+    topY,
+    botY,
+    ring,
+    inside,
+    onSkin,
+    lowerSkinY,
+    thetaAt,
+    frontX,
+    geo,
+    plate,
+    slab,
+  };
 }
 
 /* ---------- lifting-surface factory (wings, stabilizers) ---------- */

@@ -9,6 +9,20 @@ import { sidePaintUV, type PaintBox } from "./livery";
 import { V, toVec3, type Vec3 } from "./math";
 import type { Chan, SysId } from "./systems";
 
+/**
+ * Study-group ids an airplane registers by declaration merging (the SR22T's come from `ENGINE_GROUPS` in
+ * aircraft/sr22t/engine-groups.ts), so a mistyped `groups` tag is a type error.
+ */
+export interface StudyGroups {}
+export type StudyGroup = keyof StudyGroups & string;
+
+/** Rejects a `groups` tag outside `allowed` at registration, for specs the types don't reach (casts, JSON). */
+export function checkGroups(id: string, groups: readonly string[] | undefined, allowed: readonly string[]) {
+  const bad = groups?.find((group) => !allowed.includes(group));
+  if (bad !== undefined)
+    throw new Error(`${id}: unknown group "${bad}" in its groups tag; use ${allowed.join(", ")}, or [] for core`);
+}
+
 /** Per-frame hook for parts that animate or change material with the sim (t = clock seconds). */
 export type PartAnim = (mesh: THREE.Mesh, t: number) => void;
 
@@ -33,6 +47,12 @@ export interface PartSpec {
   /** Moving group this part rides on (e.g. "surf:elevR", "blade:0"); the airplane's Model renders it. */
   parent?: string;
   anim?: PartAnim;
+  /** Animation owns replacement geometry; release it on unmount and retain the shared catalogue geometry. */
+  dynamicGeo?: boolean;
+  /** Optional equipment: while this returns false the part is left out of `partsFor` and `pinned` (scene, pins, lists). */
+  fitted?: () => boolean;
+  /** Optional study-group memberships (e.g. the SR22T engine groups); `[]` is core. */
+  groups?: StudyGroup[];
   /** Translucent plate (bulkheads, firewalls). */
   plate?: boolean;
   /**
@@ -87,6 +107,8 @@ export interface FlowSpec {
   tension?: number;
   ext?: boolean;
   chan?: Chan[];
+  /** Optional study-group memberships, as on `PartSpec`. */
+  groups?: StudyGroup[];
 }
 
 /** Channel from a surface/cable key prefix: elev…/el… → elevator, ail… → aileron, rud… → rudder. */
@@ -101,11 +123,17 @@ export const chanOfKey = (k: string): Chan[] | undefined =>
 
 type PartOpts = Omit<PartSpec, "id" | "geo" | "sys">;
 
+/** Fitted, visible parts of a cached list; preserve the list when no filtering is needed. */
+const visibleOnly = (l: PartSpec[], hidden?: (spec: PartSpec) => boolean) =>
+  hidden || l.some((p) => p.fitted) ? l.filter((p) => (!p.fitted || p.fitted()) && !hidden?.(p)) : l;
+
 /**
- * Per-view label lists, by part name, for views that would otherwise pile labels up. Names that match no pinned part of the
- * view are reported in development, so renaming a part can't silently bring its label back.
+ * Per-view label lists, by part name, for views that would otherwise pile labels up. In quiet/narrow lists, names that
+ * match no pinned part of the view are reported in development. Priority names are checked by airplane tests.
  */
 export interface LabelLists {
+  /** Pins that win overlaps in a view, in listed order, before the normal home-system/catalogue ranking. */
+  priority?: Partial<Record<SysId, string[]>>;
   /** Pinned parts that stay in a view's "tap to locate" list but carry no label pin there. */
   quiet?: Partial<Record<SysId, string[]>>;
   /** Phone layout (lib/view `narrowLayout`): the only parts labelled in a view; the list keeps them all. */
@@ -122,16 +150,20 @@ export class Catalogue {
   private pins = new Map<SysId, PartSpec[]>();
   private pinIds = new Map<string, Set<string>>();
 
-  /** `paintSkin`: the airplane's painter for the solid-mode skin of shells added with `skin` true. */
+  /** `paintSkin`: the airplane's painter for the solid-mode skin of shells added with `skin` true; `groupIds`: the
+   * study-group ids `part()` accepts in a `groups` tag (others throw). */
   constructor(
     readonly prefix: string,
     readonly labels: LabelLists = {},
     private readonly paintSkin?: () => THREE.Texture,
+    private readonly hidden?: (spec: PartSpec) => boolean,
+    private readonly groupIds?: readonly string[],
   ) {}
 
   uid = (s: string) => `${this.prefix}/${s}-${this.n++}`;
 
   part = (geo: () => THREE.BufferGeometry, sys: SysId[], o: PartOpts = {}) => {
+    if (this.groupIds) checkGroups(`${this.prefix}/${o.name || "part"}-${this.n}`, o.groups, this.groupIds);
     const spec: PartSpec = { id: this.uid(o.name || "part"), geo, sys, ...o };
     this.parts.push(spec);
     this.byParent.clear();
@@ -220,11 +252,14 @@ export class Catalogue {
       l = this.parts.filter((p) => (p.parent ?? "") === k);
       this.byParent.set(k, l);
     }
-    return l;
+    return visibleOnly(l, this.hidden);
   };
 
   /** Unique pinned, named parts for a system (labels and "tap to locate" lists). */
-  pinned = (sys: SysId) => {
+  pinned = (sys: SysId) => visibleOnly(this.allPinned(sys), this.hidden);
+
+  /** `pinned` with unfitted equipment included, so cached label ids survive an equipment change. */
+  private allPinned(sys: SysId) {
     let l = this.pins.get(sys);
     if (!l) {
       const seen = new Set<string>();
@@ -234,7 +269,7 @@ export class Catalogue {
       this.pins.set(sys, l);
     }
     return l;
-  };
+  }
 
   /** Does this part carry the label pin in the given system view? (`pin`, `pinIn`, then the airplane's label lists.) */
   isPinned = (spec: PartSpec, sys: SysId, narrow = false) => {
@@ -242,7 +277,7 @@ export class Catalogue {
       key = nar ? sys + ":narrow" : sys;
     let s = this.pinIds.get(key);
     if (!s) {
-      const pinned = this.pinned(sys),
+      const pinned = this.allPinned(sys),
         quiet = this.labels.quiet?.[sys] ?? [],
         only = nar ? (this.labels.narrow?.[sys] ?? []) : null;
       if (process.env.NODE_ENV !== "production") {

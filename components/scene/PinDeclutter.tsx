@@ -19,7 +19,10 @@ export function pinPolicy(cat: Catalogue, inside?: (p: THREE.Vector3) => boolean
   });
   return {
     // own system first, then catalogue order (labels that are not parts, e.g. tanks and screens, after the parts)
-    rank: (label: string, sys: SysId) => (home.get(label) === sys ? 0 : 1) * 1e5 + (order.get(label) ?? 1e5 - 1),
+    rank: (label: string, sys: SysId) => {
+      const priority = cat.labels.priority?.[sys]?.indexOf(label) ?? -1;
+      return priority >= 0 ? priority - 1e5 : (home.get(label) === sys ? 0 : 1) * 1e5 + (order.get(label) ?? 1e5 - 1);
+    },
     hide: (label: string, camera: THREE.Camera) =>
       !!inside && !useView.getState().xray && !ext.has(label) && !inside(camera.position),
   };
