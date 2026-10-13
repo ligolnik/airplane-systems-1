@@ -6,6 +6,8 @@
  * `sim` steps, and the progress is saved (when storage allows) so a walk can be resumed.
  */
 import { create } from "zustand";
+import { PerspectiveCamera } from "three";
+import { cameraFitDistance } from "@/lib/camera";
 import { aircraft, selectAircraft, sysOf } from "@/lib/fleet";
 import { toVec3 } from "@/lib/math";
 import { view as scene } from "@/lib/registry";
@@ -99,7 +101,11 @@ function persist() {
 function framing(cam: CamRequest | null): CamRequest | null {
   const { camera, target } = scene;
   if (!camera || !target) return cam;
-  return { p: toVec3(camera.position), t: toVec3(target), id: cam?.id ?? 0, exact: true };
+  if (!(camera instanceof PerspectiveCamera))
+    return { p: toVec3(camera.position), t: toVec3(target), id: cam?.id ?? 0, exact: true };
+  // Save before the viewport fit, so leaving the taller phone stage fits this pose only once.
+  const p = camera.position.clone().sub(target).divideScalar(cameraFitDistance(camera.aspect)).add(target);
+  return { p: toVec3(p), t: toVec3(target), id: cam?.id ?? 0, restore: true };
 }
 
 /** Put `live` back to a snapshot, keeping its nested objects (the tick holds on to them). */

@@ -60,11 +60,143 @@ async function badge(page, shown) {
   if (shown) assert.equal(await page.locator(".walk-tech").innerText(), TECHNIQUE);
 }
 
+/** Observe the rendered camera through three.js's devtools hook, as in test-load-ui.mjs. */
+function hookCamera() {
+  const state = (window.__walkCamera = { camera: null, frames: 0 });
+  const dev = new EventTarget();
+  dev.addEventListener("observe", ({ detail: renderer }) => {
+    if (!renderer?.isWebGLRenderer) return;
+    const render = renderer.render.bind(renderer);
+    renderer.render = (scene, camera) => {
+      state.camera = camera;
+      state.frames++;
+      return render(scene, camera);
+    };
+  });
+  window.__THREE_DEVTOOLS__ = dev;
+  localStorage.setItem("tourDone", "1");
+}
+
+async function settledCamera(page) {
+  // Flights take a second; wait for rendered frames too, so the direction isn't stale.
+  await page.waitForTimeout(1500);
+  const read = async () => {
+    const frame = await page.evaluate(() => window.__walkCamera.frames);
+    await page.waitForFunction((f) => window.__walkCamera.frames >= f + 2, frame);
+    return page.evaluate(() => {
+      const camera = window.__walkCamera.camera;
+      camera.updateMatrixWorld();
+      return [...camera.position.toArray(), ...camera.getWorldDirection(camera.position.clone()).toArray()];
+    });
+  };
+  let previous = await read();
+  for (let i = 0; i < 60; i++) {
+    await page.waitForTimeout(250);
+    const current = await read();
+    if (current.every((v, k) => Math.abs(v - previous[k]) < 1e-6)) return current;
+    previous = current;
+  }
+  throw new Error("Camera did not settle");
+}
+
+/** Hold ResizeObserver delivery so even an animated restore can finish before the stage measurement arrives. */
+function holdResizeHook() {
+  const state = (window.__walkResize = { hold: false, pending: [] });
+  const ResizeObserver = window.ResizeObserver;
+  window.ResizeObserver = class extends ResizeObserver {
+    constructor(callback) {
+      super((entries, observer) => {
+        if (state.hold) state.pending.push(() => callback(entries, observer));
+        else callback(entries, observer);
+      });
+    }
+  };
+}
+
+async function checkCameraRestore(browser, phone, reducedMotion, maxDistance = false) {
+  const kind = phone ? "phone" : "desktop";
+  const context = await browser.newContext({
+    viewport: phone ? { width: 390, height: 844 } : { width: 1440, height: 900 },
+    isMobile: phone,
+    hasTouch: phone,
+    reducedMotion,
+  });
+  try {
+    await context.addInitScript(hookCamera);
+    if (maxDistance) await context.addInitScript(holdResizeHook);
+    const page = await context.newPage();
+    await page.goto(`${base}/sr22t/overview`);
+    await page.waitForFunction(() => window.__walkCamera.camera && !document.querySelector("[data-building]"), null, {
+      timeout: 120_000,
+    });
+    await settledCamera(page);
+    const distance = (pose) => Math.hypot(pose[0] - 0.5, pose[1] + 0.2, pose[2]);
+    if (maxDistance) {
+      const stage = await page.locator(".stage").boundingBox();
+      await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2);
+      for (let i = 0; i < 20; i++) {
+        for (let k = 0; k < 10; k++) await page.mouse.wheel(0, 100);
+        const pose = await settledCamera(page);
+        if (Math.abs(distance(pose) - 70) <= 1e-3) break;
+      }
+    }
+    const before = await settledCamera(page);
+    if (maxDistance) assert.ok(Math.abs(distance(before) - 70) <= 1e-3, "Saved camera is at the 70 m orbit limit");
+    await page.locator(".toolbar").getByRole("button", { name: "Preflight", exact: true }).click();
+    await page.getByRole("button", { name: "Begin walk-around", exact: true }).click();
+    await waitProgress(page, "Station 1 of 13 · item 1 of 26");
+    await settledCamera(page);
+    await page.getByRole("button", { name: "Next item", exact: true }).click();
+    await page.getByRole("button", { name: "Previous item", exact: true }).click();
+    if (maxDistance) await page.evaluate(() => (window.__walkResize.hold = true));
+    await page.getByRole("button", { name: "Exit the walk-around", exact: true }).click();
+    await page.locator(".walk").waitFor({ state: "detached" });
+    if (maxDistance) {
+      await page.waitForTimeout(1500);
+      const held = await page.evaluate(() => ({
+        position: window.__walkCamera.camera.position.toArray(),
+        aspect: window.__walkCamera.camera.aspect,
+        stageHeight: document.querySelector(".stage").getBoundingClientRect().height,
+        pending: window.__walkResize.pending.length,
+      }));
+      assert.ok(held.pending > 0, "The stage resize is held until after the restore flight duration");
+      assert.ok(
+        Math.abs(held.aspect - page.viewportSize().width / held.stageHeight) > 1e-3,
+        "The rendered camera still uses the old stage measurement",
+      );
+      console.log(`${kind} ${reducedMotion} maxDistance held measurement: ${JSON.stringify(held)}`);
+      await page.evaluate(() => {
+        window.__walkResize.hold = false;
+        for (const deliver of window.__walkResize.pending.splice(0)) deliver();
+      });
+    }
+    const after = await settledCamera(page);
+    const name = `${kind} ${reducedMotion}${maxDistance ? " maxDistance" : ""}`;
+    console.log(
+      `${name} active Exit: ${JSON.stringify({ before, after, beforeDistance: distance(before), afterDistance: distance(after) })}`,
+    );
+    if (shots)
+      await page.screenshot({
+        path: join(shots, `${kind}-${reducedMotion}${maxDistance ? "-maxDistance" : ""}-active-exit.png`),
+        fullPage: phone,
+      });
+    assert.ok(
+      after.every((v, k) => Math.abs(v - before[k]) <= 1e-3),
+      `${name}: active Exit restores the saved camera within 1e-3: ${after} vs ${before}`,
+    );
+  } finally {
+    await context.close();
+  }
+}
+
 let server, browser;
 try {
   if (!args[0]) server = await startServer();
   if (shots) mkdirSync(shots, { recursive: true });
   browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+  for (const phone of [true, false])
+    for (const motion of ["no-preference", "reduce"]) await checkCameraRestore(browser, phone, motion);
+  for (const motion of ["no-preference", "reduce"]) await checkCameraRestore(browser, true, motion, true);
   for (const phone of [true, false]) {
     const kind = phone ? "phone" : "desktop";
     const context = await browser.newContext({

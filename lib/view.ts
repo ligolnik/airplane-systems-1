@@ -23,6 +23,8 @@ export interface CamRequest {
   id: number;
   /** A pose already fitted to the viewport (e.g. a framing put back as the user left it): used as is. */
   exact?: boolean;
+  /** Wait for the canvas to measure its stage before applying a saved framing. */
+  restore?: boolean;
 }
 
 export interface View {

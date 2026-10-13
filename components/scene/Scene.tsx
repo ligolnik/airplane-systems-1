@@ -31,6 +31,7 @@ function CameraRig() {
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
+  const applied = useRef<[typeof cam, typeof controls, typeof camera] | null>(null);
   const flight = useRef<{
     fp: THREE.Vector3;
     ft: THREE.Vector3;
@@ -66,8 +67,24 @@ function CameraRig() {
     }
   }, [controls, camera, fit]);
 
-  useEffect(() => {
-    if (!cam || !controls) return;
+  // Apply requests before OrbitControls updates, so their own motion cannot count as a drag.
+  const applyRequest = () => {
+    if (useView.getState().cam !== cam) return;
+    const prev = applied.current;
+    applied.current = cam && controls ? prev : null;
+    if (!cam || !controls || previousFit.current !== fit) return;
+    if (prev && prev[0] === cam && prev[1] === controls && prev[2] === camera) return;
+    // A saved restore must wait for the canvas to measure the stage, before any orbit-limit clamp.
+    if (cam.restore) {
+      const rect = controls.domElement?.parentElement?.getBoundingClientRect();
+      const walking = controls.domElement?.closest(".app.walking");
+      if (walking || (rect && (rect.width !== size.width || rect.height !== size.height))) {
+        flight.current = null;
+        press.current = null;
+        return;
+      }
+    }
+    applied.current = [cam, controls, camera];
     press.current = null;
     // drop any momentum left from a drag (damping would keep turning the camera after the jump or flight);
     // an update with damping off zeroes it, then the camera is put back where it was
@@ -90,7 +107,8 @@ function CameraRig() {
       return;
     }
     flight.current = { fp: camera.position.clone(), ft: controls.target.clone(), tp, tt, t0: performance.now() };
-  }, [cam, controls, camera]);
+  };
+  useFrame(applyRequest, -2);
 
   useEffect(() => {
     view.camera = camera;
@@ -101,6 +119,7 @@ function CameraRig() {
     if (!controls) return;
     // a press stops a flight; it counts as a camera move only once the camera moves (a tap just shows a part's note)
     const start = () => {
+      applied.current = [useView.getState().cam, controls, camera];
       flight.current = null;
       press.current = { p: camera.position.clone(), t: controls.target.clone() };
     };
