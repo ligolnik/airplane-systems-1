@@ -4,6 +4,7 @@
  * modules (panels etc.) can import these helpers without importing each other.
  */
 import type { AircraftDef } from "@/aircraft/types";
+import type { CameraPreset } from "./camera";
 import type { Vec3 } from "./math";
 import type { AircraftId, SysDef, SysId } from "./systems";
 import { useView } from "./view";
@@ -70,4 +71,10 @@ export function resetCam(): [Vec3, Vec3] {
   const v = useView.getState(),
     def = aircraft(v.ac);
   return def.resetCam?.() ?? sysOf(def, v.sys).cam;
+}
+
+/** Apply a URL preset to the same focus used by Reset view. */
+export function applyCameraPreset(preset: CameraPreset) {
+  const [p, t] = resetCam();
+  useView.getState().flyTo(p, t, preset);
 }

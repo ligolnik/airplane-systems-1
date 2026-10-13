@@ -6,6 +6,7 @@
  */
 import { create } from "zustand";
 import { useSyncExternalStore } from "react";
+import type { CameraPreset } from "./camera";
 import type { Spot } from "./spot";
 import type { Vec3 } from "./math";
 import type { AircraftId, Chan, SysId, Theme } from "./systems";
@@ -18,6 +19,7 @@ export interface HoverInfo {
   y: number;
 }
 export interface CamRequest {
+  preset?: CameraPreset;
   p: Vec3;
   t: Vec3;
   id: number;
@@ -48,7 +50,7 @@ export interface View {
 
 interface ViewStore extends View {
   set: (p: Partial<View>) => void;
-  flyTo: (p: Vec3, t: Vec3) => void;
+  flyTo: (p: Vec3, t: Vec3, preset?: CameraPreset) => void;
   /** Apply a theme; `save` (the default) remembers it as the user's choice. */
   setTheme: (t: Theme, save?: boolean) => void;
   setHover: (h: HoverInfo | null) => void;
@@ -103,7 +105,7 @@ export const useView = create<ViewStore>((set) => ({
   spot: null,
   walking: false,
   set: (p) => set(p),
-  flyTo: (p, t) => set({ cam: { p, t, id: ++camId } }),
+  flyTo: (p, t, preset) => set({ cam: { p, t, preset, id: ++camId } }),
   setTheme: (theme, save = true) => {
     set({ theme });
     document.documentElement.setAttribute("data-theme", theme);

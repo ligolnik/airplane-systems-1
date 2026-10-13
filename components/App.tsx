@@ -1,7 +1,18 @@
 "use client";
 import dynamic from "next/dynamic";
+import { parseCameraPreset } from "@/lib/camera";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { aircraft, hasSys, resetCam, selectAircraft, selectSys, showInUrl, sysOf, useAircraft } from "@/aircraft";
+import {
+  aircraft,
+  applyCameraPreset,
+  hasSys,
+  resetCam,
+  selectAircraft,
+  selectSys,
+  showInUrl,
+  sysOf,
+  useAircraft,
+} from "@/aircraft";
 import { isAircraftId, sysColor, type AircraftId, type SysId, type Theme } from "@/lib/systems";
 import { revealStage, useView } from "@/lib/view";
 import { Loader } from "./Loader";
@@ -256,6 +267,8 @@ function useBoot() {
     if (u) show(...u);
     else show(isAircraftId(saved) ? saved : "sr20");
     aircraft(useView.getState().ac).prepare?.();
+    const preset = parseCameraPreset(new URLSearchParams(location.search).get("cam"));
+    if (preset) applyCameraPreset(preset);
     // the airplane's walk-around: a ?walk= deep link, or saved progress to resume
     aircraft(useView.getState().ac).walk?.boot(location.search);
     return () => os.removeEventListener("change", onOs);

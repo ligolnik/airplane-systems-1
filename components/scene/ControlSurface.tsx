@@ -75,7 +75,7 @@ export function ControlSurface({
         material={material}
         renderOrder={xray ? 2 : 0}
         raycast={surfaceRaycast}
-        userData={{ pick }}
+        userData={{ pick, cameraBounds: true }}
       />
       <Parts cat={cat} parent={"surf:" + spec.key} />
     </group>

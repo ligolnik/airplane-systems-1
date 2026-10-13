@@ -8,6 +8,7 @@
  *   npm run shot -- all --out .shots/after --compare .shots/before    and report which views changed
  *
  * Options: --out <dir> (default .shots), --theme light|dark, --phone (390×844, full page), --solid (X-ray off),
+ * --cam top|side|front|below|iso (comma-separated presets; PNGs suffixed with the preset),
  * --no-labels, --url <base> (use a running server instead of starting `next dev`), --wait <ms> (settle time, default 2500),
  * --compare <dir> (diff against same-named PNGs there; exits 1 when any view differs by more than --tolerance percent, default
  * 0.5, and writes <view>.diff.png with the differing pixels in red). Views with the engine running differ a little between
@@ -20,10 +21,11 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium, errors } from "playwright-core";
+import { parseShotCameras, shotFilename, shotQuery } from "./shot-camera.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
 
-const args = process.argv.slice(2);
+const { args, cameras } = parseShotCameras(process.argv.slice(2));
 const opt = (name, dflt) => {
   const i = args.indexOf(name);
   if (i < 0) return dflt;
@@ -165,9 +167,10 @@ try {
       console.log(`  [${m.type()}] ${m.text()}`);
   });
   page.on("pageerror", (e) => console.log(`  [pageerror] ${e.message}`));
-  for (const v of views) {
-    console.log(v);
-    await page.goto(`${base}/${v}`, { waitUntil: "domcontentloaded" });
+  for (const { v, camera } of views.flatMap((v) => cameras.map((camera) => ({ v, camera })))) {
+    console.log(`${v}${camera ? ` (${camera})` : ""}`);
+    const query = shotQuery("", camera);
+    await page.goto(`${base}/${v}${query ? "?" + query : ""}`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("canvas", { timeout: 60000 });
     // A progressive scene can show its cabin while hundreds of other parts are still absent.
     // Finish the build through the same control available to the user before taking review evidence.
@@ -204,7 +207,7 @@ try {
       [solid, noLabels],
     );
     await page.waitForTimeout(wait);
-    const file = join(out, v.replace("/", "-") + (phone ? "-phone" : "") + ".png");
+    const file = join(out, shotFilename(v, phone, camera));
     // Software WebGL can need longer than Playwright's default 30 s to read back a detailed fleet scene.
     writeFileSync(file, await page.screenshot({ fullPage: phone, timeout: 120000 }));
     if (compare) {
@@ -223,7 +226,7 @@ try {
     }
   }
   console.log(
-    `\n${views.length} screenshot(s) in ${out}` +
+    `\n${views.length * cameras.length} screenshot(s) in ${out}` +
       (compare ? `; ${changed} differ from ${compare} by more than ${tolerance}%` : ""),
   );
 } finally {

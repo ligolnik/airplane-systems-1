@@ -365,7 +365,13 @@ async function loaderThenScene(page, route) {
 
 const ROUTES = ["/sr22t", "/sr22t/electrical", "/sr20", "/c172s", "/c182t", "/da40", "/m20c"];
 // explicit views: a bare /sr22t reopens the last system viewed in this browser
-const CAMERAS = ["/sr22t/overview", "/sr22t/electrical"];
+const CAMERAS = [
+  "/sr22t/overview",
+  "/sr22t/overview?cam=iso",
+  "/sr22t/overview?cam=top",
+  "/sr22t/electrical",
+  "/sr22t/electrical?cam=side",
+];
 
 let server, browser;
 try {

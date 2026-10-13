@@ -37,7 +37,7 @@ export interface AircraftDef {
   Model: ComponentType;
   /**
    * The Model builds itself progressively (airframe first, then systems over several frames) and moves the loader's stages
-   * itself (lib/build.ts); airplanes without it get the loader's stages from the scene (components/scene/Scene.tsx).
+   * itself (lib/build.ts); the scene then waits for the build before framing a camera preset on the model's bounds.
    */
   progressive?: boolean;
   /** Called when the page boots on this airplane, before its 3D code has loaded: start slow work early (SR22T: its

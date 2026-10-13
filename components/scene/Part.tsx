@@ -124,7 +124,7 @@ export function Part({ spec, cat }: { spec: PartSpec; cat: Catalogue }) {
       position={spec.pos}
       rotation={spec.rot}
       scale={spec.scale}
-      userData={{ pick }}
+      userData={{ pick, cameraBounds: true }}
     >
       {showPin && spec.name && <Pin at={centerOf(geo)} label={spec.name} color={sysColor(sys, theme)} />}
     </mesh>
@@ -161,7 +161,7 @@ export function Shell({ spec }: { spec: ShellSpec }) {
   const pick: PickInfo | undefined = spec.name
     ? { name: spec.name, note: spec.note, color: palette(theme).frame, sys: ["airframe"], shell: true }
     : undefined;
-  return <mesh geometry={geo} material={material} renderOrder={xray ? 2 : 0} userData={{ pick }} />;
+  return <mesh geometry={geo} material={material} renderOrder={xray ? 2 : 0} userData={{ pick, cameraBounds: true }} />;
 }
 
 export const Shells = ({ cat }: { cat: Catalogue }) => (

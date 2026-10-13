@@ -13,8 +13,8 @@ import { palette } from "@/lib/systems";
 import { nextFrame, setBuild, useBuild } from "@/lib/build";
 import { advanceSimulation } from "@/lib/simulationClock";
 import { prepareGeometry } from "@/lib/mesh/prebuilt";
-import { CAMERA_FOV, cameraFitDistance as fitDist } from "@/lib/camera";
-import { useView } from "@/lib/view";
+import { airplaneBounds, CAMERA_FOV, cameraFitDistance as fitDist, viewPresetCamera } from "@/lib/camera";
+import { useView, type CamRequest } from "@/lib/view";
 import type { PickInfo } from "./Part";
 import { PinDeclutter, pinPolicy } from "./PinDeclutter";
 
@@ -32,12 +32,20 @@ function clearDamping(controls: OrbitControlsImpl) {
   controls.enableDamping = true;
 }
 
-/** Animates the camera to the latest requested view; any user drag cancels the flight. */
+/**
+ * Animates the camera to the latest requested view before OrbitControls updates; any user drag cancels the flight.
+ * Saved restores wait for the stage measurement. While an airplane is building, an overview preset waits for the
+ * complete model bounds; a drag meanwhile drops it.
+ */
 function CameraRig() {
   const cam = useView((x) => x.cam);
+  const building = useBuild((b) => b.stage !== "ready");
+  // An overview preset waits for complete bounds; a user drag consumes the held request.
+  const held = useRef<CamRequest | null>(null);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
+  const scene = useThree((s) => s.scene);
   const applied = useRef<[typeof cam, typeof controls, typeof camera] | null>(null);
   const flight = useRef<{
     fp: THREE.Vector3;
@@ -81,6 +89,10 @@ function CameraRig() {
     applied.current = cam && controls ? prev : null;
     if (!cam || !controls || previousFit.current !== fit) return;
     if (prev && prev[0] === cam && prev[1] === controls && prev[2] === camera) return;
+    if (building && cam.preset && useView.getState().sys === "overview") {
+      held.current = cam;
+      return;
+    }
     // A saved restore must wait for the canvas to measure the stage, before any orbit-limit clamp.
     if (cam.restore) {
       const rect = controls.domElement?.parentElement?.getBoundingClientRect();
@@ -92,6 +104,7 @@ function CameraRig() {
       }
     }
     applied.current = [cam, controls, camera];
+    held.current = null;
     press.current = null;
     // drop any momentum left from a drag (damping would keep turning the camera after the jump or flight);
     // an update with damping off zeroes it, then the camera is put back where it was
@@ -100,10 +113,23 @@ function CameraRig() {
     clearDamping(controls);
     camera.position.copy(p0);
     controls.target.copy(t0);
-    const tt = V(...cam.t),
-      tp = V(...cam.p)
+    const model = scene.getObjectByName("aircraft-model");
+    const fitted =
+      cam.preset && model && camera instanceof THREE.PerspectiveCamera
+        ? viewPresetCamera(
+            cam.preset,
+            cam.p,
+            cam.t,
+            useView.getState().sys === "overview" ? airplaneBounds(model) : null,
+            camera.fov,
+            size.width / size.height,
+          )
+        : null;
+    const [p, t] = fitted ?? [cam.p, cam.t];
+    const tt = V(...t),
+      tp = V(...p)
         .sub(tt)
-        .multiplyScalar(cam.exact ? 1 : fitDist(size.width / size.height))
+        .multiplyScalar(fitted || cam.exact ? 1 : fitDist(size.width / size.height))
         .add(tt);
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
       flight.current = null;
@@ -126,6 +152,10 @@ function CameraRig() {
     const start = () => {
       applied.current = [useView.getState().cam, controls, camera];
       flight.current = null;
+      // the user took the camera before a held preset could be framed: it is not applied later
+      if (held.current !== null && held.current === useView.getState().cam)
+        applied.current = [held.current, controls, camera];
+      held.current = null;
       press.current = { p: camera.position.clone(), t: controls.target.clone() };
     };
     const change = () => {
@@ -243,6 +273,7 @@ function AircraftScene({ def, gridRef }: { def: AircraftDef; gridRef: React.RefO
             materials (passed as props, which R3F never disposes); R3F disposes JSX-created geometry and materials, and
             Flows, Screens, Tanks, LightFX, Links and WindowOutlines free what they build. */}
         <group
+          name="aircraft-model"
           ref={modelRef}
           position={[-def.pivotX, 0, 0]}
           onPointerMove={onMove}
